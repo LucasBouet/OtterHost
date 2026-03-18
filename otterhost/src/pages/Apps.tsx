@@ -14,7 +14,7 @@ function Apps() {
       app.tags?.forEach((tag) => tagsSet.add(tag));
     });
     return Array.from(tagsSet).sort();
-  }, []);
+  }, [apps]);
 
   const filteredApps = useMemo(() => {
     return apps.filter((app) => {
