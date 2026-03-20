@@ -67,8 +67,6 @@ function AppDetail() {
         volumes: volumes,
       };
 
-      console.log(JSON.stringify(payload));
-
       const response = await fetch("http://localhost:8080/api/downloaddocker", {
         method: "POST",
         headers: {
