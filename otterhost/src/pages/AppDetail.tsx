@@ -17,7 +17,7 @@ type Params = {
 
 function AppDetail() {
   const { appId } = useParams<Params>();
-  const app = apps.find((a: AppConfig) => a.id === appId);
+  const app: AppConfig | undefined = apps.find((a: AppConfig) => a.id === appId);
 
   if (!app) {
     return (
@@ -47,7 +47,6 @@ function AppDetail() {
     );
   }
 
-  // Now we are sure app.config exists
   const appConfiguration: AppContent = app.config;
   const appConfigurationPort: AppPort = appConfiguration.ports;
   const appConfigurationEnv: AppEnv = appConfiguration.env;
