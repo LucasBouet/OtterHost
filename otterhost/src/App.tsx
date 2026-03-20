@@ -3,6 +3,7 @@ import { Routes, Route } from "react-router-dom";
 import Dashboard from "./pages/Dashboard.tsx";
 import NotFound from "./pages/404.tsx";
 import Apps from "./pages/Apps.tsx";
+import AppDetail from "./pages/AppDetail.tsx";
 import "./global.css";
 
 function App() {
@@ -17,6 +18,7 @@ function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="*" element={<NotFound />} />
           <Route path="/apps" element={<Apps />} />
+          <Route path="/apps/:appId" element={<AppDetail />} />
         </Routes>
       </main>
     </div>

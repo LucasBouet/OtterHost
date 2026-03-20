@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import AppContainer from "../components/AppContainer";
 import { apps } from "../config/apps.config";
 
@@ -7,6 +8,11 @@ function Apps() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [showTags, setShowTags] = useState(false);
+  const navigate = useNavigate();
+
+  const handleAppClick = (appId: string) => {
+    navigate(`/apps/${appId}`);
+  };
 
   const allTags = useMemo(() => {
     const tagsSet = new Set<string>();
@@ -31,7 +37,9 @@ function Apps() {
 
   return (
     <div className="p-6 flex flex-col h-full">
-      <h1 className="text-4xl font-bold mb-8 shrink-0">Applications management</h1>
+      <h1 className="text-4xl font-bold mb-8 shrink-0">
+        Applications management
+      </h1>
 
       {/* Controls row: Tags dropdown | Search | View toggle */}
       <div className="flex items-center gap-4 mb-8 shrink-0">
@@ -169,9 +177,9 @@ function Apps() {
       </div>
 
       {/* Apps */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto overflow-x-visible">
         <div
-          className={`grid gap-6 ${
+          className={`grid gap-6 overflow-visible p-2 ${
             viewMode === "grid"
               ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
               : "grid-cols-1"
@@ -185,6 +193,7 @@ function Apps() {
               logo={app.logo}
               id={app.id}
               tags={app.tags}
+              onAppClick={handleAppClick}
             />
           ))}
           {filteredApps.length === 0 && (

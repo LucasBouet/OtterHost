@@ -20,14 +20,14 @@ struct Metrics {
 async fn collect_metrics(sys: &mut System) -> Result<Metrics> {
     // Refresh only what we need
     sys.refresh_memory();
-    sys.refresh_cpu();
+    sys.refresh_cpu_all();
 
     // RAM (GB)
     let ram_current = sys.used_memory() as f64 / 1e9;
     let ram_max = sys.total_memory() as f64 / 1e9;
 
     // CPU (%)
-    let cpu_usage = sys.global_cpu_info().cpu_usage() as f64;
+    let cpu_usage = sys.global_cpu_usage() as f64;
 
     // Storage via `df`
     let output = Command::new("df")
@@ -82,8 +82,7 @@ async fn main() -> Result<()> {
     let client = Client::new();
     let mut sys = System::new_all();
 
-    // 🔥 Warmup for CPU measurement (CRITICAL)
-    sys.refresh_cpu();
+    sys.refresh_cpu_all();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     let mut interval = interval(Duration::from_secs(5));
