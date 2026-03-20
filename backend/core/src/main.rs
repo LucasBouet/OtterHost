@@ -14,6 +14,7 @@ use std::{
 };
 
 use tokio::fs;
+use tokio::process::Command;
 use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
@@ -64,6 +65,16 @@ struct DownloadRequest {
     volumes: Vec<String>,
 }
 
+#[derive(Deserialize)]
+struct DockerCheckQuery {
+    name: String,
+}
+
+#[derive(Serialize)]
+struct DockerStatusResponse {
+    running: bool,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // create app dir
@@ -91,6 +102,7 @@ async fn main() -> Result<()> {
         .route("/api/files", get(list_files))
         .route("/api/isdownloaded", get(check_folder_exists))
         .route("/api/downloaddocker", axum::routing::post(download_docker))
+        .route("/api/isdockerrunning", get(check_container_running))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state);
@@ -326,4 +338,36 @@ async fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
     }
 
     Ok(())
+}
+
+async fn check_container_running(
+    Query(query): Query<DockerCheckQuery>,
+) -> Result<Json<DockerStatusResponse>, StatusCode> {
+    if query.name.trim().is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let output = Command::new("docker")
+        .args([
+            "ps",
+            "--filter",
+            &format!("name={}", query.name),
+            "--filter",
+            "status=running",
+            "--format",
+            "{{.Names}}",
+        ])
+        .output()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if !output.status.success() {
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    let running = stdout.lines().any(|line| line.trim() == query.name);
+
+    Ok(Json(DockerStatusResponse { running }))
 }
