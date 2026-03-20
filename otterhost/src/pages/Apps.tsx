@@ -201,7 +201,7 @@ function Apps() {
               <div className="text-6xl">🔍</div>
               <p className="text-xl">No apps found</p>
               <p className="text-sm opacity-75">
-                Try adjusting your search or tag filters
+                Nor the filters or the search matched to something...
               </p>
             </div>
           )}
