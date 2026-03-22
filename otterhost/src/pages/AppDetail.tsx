@@ -95,16 +95,6 @@ function AppDetail() {
     return data;
   };
 
-  const handleDownload = async () => {
-    try {
-      const data = await downloadToServer();
-      console.log("Success:", data);
-    } catch (error) {
-      console.error("Error:", error);
-      alert("Failed to send request");
-    }
-  };
-
   // get the container status
   const fetchDockerStatus = async () => {
     try {
