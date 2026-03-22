@@ -10,6 +10,7 @@ import type {
 import { apps } from "../config/apps.config.tsx";
 import ConfigSection from "../components/ConfigSection.tsx";
 import "../global.css";
+import { Button as LoadingButton } from "@/components/ui/stateful-button.tsx";
 
 type Params = {
   appId: string;
@@ -17,7 +18,9 @@ type Params = {
 
 function AppDetail() {
   const { appId } = useParams<Params>();
-  const app: AppConfig | undefined = apps.find((a: AppConfig) => a.id === appId);
+  const app: AppConfig | undefined = apps.find(
+    (a: AppConfig) => a.id === appId,
+  );
 
   if (!app) {
     return (
@@ -58,30 +61,41 @@ function AppDetail() {
   const [volumes, setVolumes] = useState([...appConfigurationVolume.path]);
 
   // Send request to the API to build the docker compose
+  const delay = (ms: number) =>
+    new Promise((resolve) => setTimeout(resolve, ms));
+
+  const downloadToServer = async () => {
+    const payload = {
+      id: app.id,
+      ports: ports,
+      env: envs,
+      volumes: volumes,
+    };
+
+    const response = await fetch("http://localhost:8080/api/downloaddocker", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    // Optional fake delay for animation
+    await delay(2000);
+
+    return data;
+  };
+
   const handleDownload = async () => {
     try {
-      const payload = {
-        id: app.id,
-        ports: ports,
-        env: envs,
-        volumes: volumes,
-      };
-
-      const response = await fetch("http://localhost:8080/api/downloaddocker", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await downloadToServer();
       console.log("Success:", data);
-      alert("Download started successfully");
     } catch (error) {
       console.error("Error:", error);
       alert("Failed to send request");
@@ -168,15 +182,16 @@ function AppDetail() {
 
         {/* Download button */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center mt-4">
-          <button
+          <LoadingButton
             onClick={handleDownload}
-            className="cursor-pointer flex-1 max-w-md px-8 py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl shadow-lg hover:shadow-emerald-500/25 hover:-translate-y-1 transition-all duration-300 ease-out text-lg"
+            className="cursor-pointer ring-offset-0 w-full sm:w-md px-8 py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl shadow-lg hover:shadow-emerald-500/25 hover:-translate-y-1 transition-all duration-300 ease-out text-lg flex items-center justify-center"
           >
             Download to the server
-          </button>
+          </LoadingButton>
+
           <Link
             to="/apps"
-            className="flex-1 max-w-md px-8 py-4 bg-slate-700/50 hover:bg-slate-600 border border-slate-600 text-white font-semibold rounded-xl shadow-md hover:shadow-slate-500/25 hover:-translate-y-1 transition-all duration-300 ease-out text-lg flex items-center justify-center"
+            className="w-full  sm:w-md px-8 py-4 bg-slate-700/50 hover:bg-slate-600 border border-slate-600 text-white font-semibold rounded-xl shadow-md hover:shadow-slate-500/25 hover:-translate-y-1 transition-all duration-300 ease-out text-lg flex items-center justify-center"
           >
             ← Back to Apps
           </Link>
