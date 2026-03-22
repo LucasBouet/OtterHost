@@ -1,5 +1,5 @@
 import { useParams, Link } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   AppConfig,
   AppContent,
@@ -59,6 +59,10 @@ function AppDetail() {
   const [ports, setPorts] = useState([...appConfigurationPort.port]);
   const [envs, setEnvs] = useState([...appConfigurationEnv.env]);
   const [volumes, setVolumes] = useState([...appConfigurationVolume.path]);
+  const [dockerStatusState, setDockerStatusState] = useState<
+    "none" | "downloaded" | "running"
+  >("none");
+  const [loading, setLoading] = useState(false);
 
   // Send request to the API to build the docker compose
   const delay = (ms: number) =>
@@ -86,7 +90,6 @@ function AppDetail() {
 
     const data = await response.json();
 
-    // Optional fake delay for animation
     await delay(2000);
 
     return data;
@@ -99,6 +102,55 @@ function AppDetail() {
     } catch (error) {
       console.error("Error:", error);
       alert("Failed to send request");
+    }
+  };
+
+  // get the container status
+  const fetchDockerStatus = async () => {
+    try {
+      const response = await fetch(
+        `http://localhost:8080/api/dockerstatus?name=${app.id}`,
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      setDockerStatusState(data.status); // "none" | "downloaded" | "running"
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchDockerStatus();
+  }, []);
+
+  // button click effects
+  const handleDockerAction = async () => {
+    if (!app) return;
+    setLoading(true);
+
+    try {
+      if (dockerStatusState === "none") {
+        // Download container
+        await downloadToServer();
+        await fetchDockerStatus();
+      } else if (dockerStatusState === "downloaded") {
+        // Run container
+        await fetch(`http://localhost:8080/api/dockerrun?name=${app.id}`, {
+          method: "POST",
+        });
+        await fetchDockerStatus();
+      } else if (dockerStatusState === "running") {
+        // Stop container
+        await fetch(`http://localhost:8080/api/dockerstop?name=${app.id}`, {
+          method: "POST",
+        });
+        await fetchDockerStatus();
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Action failed");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -183,10 +235,26 @@ function AppDetail() {
         {/* Download button */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center mt-4">
           <LoadingButton
-            onClick={handleDownload}
-            className="cursor-pointer ring-offset-0 w-full sm:w-md px-8 py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl shadow-lg hover:shadow-emerald-500/25 hover:-translate-y-1 transition-all duration-300 ease-out text-lg flex items-center justify-center"
+            onClick={handleDockerAction}
+            disabled={loading}
+            className={`cursor-pointer ring-offset-0 w-full sm:w-md px-8 py-4 text-white font-semibold rounded-xl shadow-lg hover:-translate-y-1 transition-all duration-300 ease-out text-lg flex items-center justify-center
+    ${
+      loading
+        ? "bg-slate-500 cursor-not-allowed"
+        : dockerStatusState === "none"
+          ? "bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/25"
+          : dockerStatusState === "downloaded"
+            ? "bg-blue-600 hover:bg-blue-500 shadow-blue-500/25"
+            : "bg-red-600 hover:bg-red-500 shadow-red-500/25"
+    }`}
           >
-            Download to the server
+            {loading
+              ? "Processing..."
+              : dockerStatusState === "none"
+                ? "Download to the server"
+                : dockerStatusState === "downloaded"
+                  ? "Run container"
+                  : "Stop container"}
           </LoadingButton>
 
           <Link

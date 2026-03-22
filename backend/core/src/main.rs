@@ -75,6 +75,16 @@ struct DockerStatusResponse {
     running: bool,
 }
 
+#[derive(Serialize)]
+struct DockerFullStatusResponse {
+    status: String, // "none", "downloaded", or "running"
+}
+
+#[derive(Deserialize)]
+struct DockerFullStatusQuery {
+    name: String,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // create app dir
@@ -103,6 +113,7 @@ async fn main() -> Result<()> {
         .route("/api/isdownloaded", get(check_folder_exists))
         .route("/api/downloaddocker", axum::routing::post(download_docker))
         .route("/api/isdockerrunning", get(check_container_running))
+        .route("/api/dockerstatus", get(docker_full_status))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state);
@@ -370,4 +381,50 @@ async fn check_container_running(
     let running = stdout.lines().any(|line| line.trim() == query.name);
 
     Ok(Json(DockerStatusResponse { running }))
+}
+
+async fn docker_full_status(
+    State(state): State<AppState>,
+    Query(query): Query<DockerFullStatusQuery>,
+) -> Result<Json<DockerFullStatusResponse>, StatusCode> {
+    if query.name.trim().is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    // Check if the folder exists
+    let folder_path = state.base_path.join("docker").join(&query.name);
+    let folder_exists = fs::metadata(&folder_path)
+        .await
+        .map(|m| m.is_dir())
+        .unwrap_or(false);
+
+    if !folder_exists {
+        return Ok(Json(DockerFullStatusResponse {
+            status: "none".to_string(),
+        }));
+    }
+
+    // Check if the container is running
+    let output = Command::new("docker")
+        .args([
+            "ps",
+            "--filter",
+            &format!("name={}", query.name),
+            "--filter",
+            "status=running",
+            "--format",
+            "{{.Names}}",
+        ])
+        .output()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let is_running = stdout.lines().any(|line| line.trim() == query.name);
+
+    let status = if is_running { "running" } else { "downloaded" };
+
+    Ok(Json(DockerFullStatusResponse {
+        status: status.to_string(),
+    }))
 }
