@@ -85,6 +85,26 @@ struct DockerFullStatusQuery {
     name: String,
 }
 
+#[derive(Deserialize)]
+struct DockerRunQueryName {
+    name: String,
+}
+
+#[derive(Serialize)]
+struct DockerRunQueryResponse {
+    status: String,
+}
+
+#[derive(Deserialize)]
+struct DockerStopQuery {
+    name: String,
+}
+
+#[derive(Serialize)]
+struct DockerStopResponse {
+    status: String,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // create app dir
@@ -110,10 +130,12 @@ async fn main() -> Result<()> {
     let app = Router::new()
         .route("/api/metrics", get(get_metrics).post(post_metrics))
         .route("/api/files", get(list_files))
-        .route("/api/isdownloaded", get(check_folder_exists))
-        .route("/api/downloaddocker", axum::routing::post(download_docker))
-        .route("/api/isdockerrunning", get(check_container_running))
-        .route("/api/dockerstatus", get(docker_full_status))
+        .route("/api/docker/isdownloaded", get(check_folder_exists))
+        .route("/api/docker/download", axum::routing::post(download_docker))
+        .route("/api/docker/running", get(check_container_running))
+        .route("/api/docker/status", get(docker_full_status))
+        .route("/api/docker/run", axum::routing::post(docker_run))
+        .route("/api/docker/stop", axum::routing::post(docker_stop))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state);
@@ -320,6 +342,11 @@ async fn download_docker(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    let source = env_file_path.with_extension("env");
+    fs::rename(&source, target_dir.join(".env"))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     Ok(Json(serde_json::json!({
         "status": "ok",
         "id": payload.id
@@ -426,5 +453,148 @@ async fn docker_full_status(
 
     Ok(Json(DockerFullStatusResponse {
         status: status.to_string(),
+    }))
+}
+
+async fn docker_run(
+    State(state): State<AppState>,
+    Json(query): Json<DockerRunQueryName>,
+) -> Result<Json<DockerRunQueryResponse>, StatusCode> {
+    if query.name.trim().is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    if query.name.contains("..") || query.name.contains('/') {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let app_path = state.base_path.join("docker").join(&query.name);
+
+    // Check folder exists
+    let exists = fs::metadata(&app_path)
+        .await
+        .map(|m| m.is_dir())
+        .unwrap_or(false);
+
+    if !exists {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    // ─── Check if already running ───
+    let check_output = Command::new("docker")
+        .args([
+            "ps",
+            "--filter",
+            &format!("name={}", query.name),
+            "--filter",
+            "status=running",
+            "--format",
+            "{{.Names}}",
+        ])
+        .output()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let stdout = String::from_utf8_lossy(&check_output.stdout);
+    let is_running = stdout.lines().any(|line| line.trim() == query.name);
+
+    if is_running {
+        return Ok(Json(DockerRunQueryResponse {
+            status: "already_running".to_string(),
+        }));
+    }
+
+    // ─── Start container ───
+    let output = Command::new("docker")
+        .arg("compose")
+        .arg("up")
+        .arg("-d")
+        .current_dir(&app_path)
+        .output()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if !output.status.success() {
+        eprintln!(
+            "Docker start failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        return Ok(Json(DockerRunQueryResponse {
+            status: "error".to_string(),
+        }));
+    }
+
+    Ok(Json(DockerRunQueryResponse {
+        status: "started".to_string(),
+    }))
+}
+
+async fn docker_stop(
+    State(state): State<AppState>,
+    Json(query): Json<DockerStopQuery>,
+) -> Result<Json<DockerStopResponse>, StatusCode> {
+    if query.name.trim().is_empty() || query.name.contains("..") || query.name.contains('/') {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let app_path = state.base_path.join("docker").join(&query.name);
+
+    // Check folder exists
+    let exists = fs::metadata(&app_path)
+        .await
+        .map(|m| m.is_dir())
+        .unwrap_or(false);
+
+    if !exists {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    // Check if container is running
+    let check_output = Command::new("docker")
+        .args([
+            "ps",
+            "--filter",
+            &format!("name={}", query.name),
+            "--filter",
+            "status=running",
+            "--format",
+            "{{.Names}}",
+        ])
+        .output()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let stdout = String::from_utf8_lossy(&check_output.stdout);
+    let is_running = stdout.lines().any(|line| line.trim() == query.name);
+
+    if !is_running {
+        return Ok(Json(DockerStopResponse {
+            status: "not_running".to_string(),
+        }));
+    }
+
+    // Stop container
+    let output = Command::new("docker")
+        .arg("compose")
+        .arg("down")
+        .current_dir(&app_path)
+        .output()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if !output.status.success() {
+        eprintln!(
+            "Docker stop failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        return Ok(Json(DockerStopResponse {
+            status: "error".to_string(),
+        }));
+    }
+
+    Ok(Json(DockerStopResponse {
+        status: "stopped".to_string(),
     }))
 }

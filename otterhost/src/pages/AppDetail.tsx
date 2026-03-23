@@ -9,7 +9,6 @@ import type {
 } from "../config/apps.config.tsx";
 import { apps } from "../config/apps.config.tsx";
 import ConfigSection from "../components/ConfigSection.tsx";
-import "../global.css";
 import { Button as LoadingButton } from "@/components/ui/stateful-button.tsx";
 
 type Params = {
@@ -76,7 +75,7 @@ function AppDetail() {
       volumes: volumes,
     };
 
-    const response = await fetch("http://localhost:8080/api/downloaddocker", {
+    const response = await fetch("http://localhost:8080/api/docker/download", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -99,7 +98,7 @@ function AppDetail() {
   const fetchDockerStatus = async () => {
     try {
       const response = await fetch(
-        `http://localhost:8080/api/dockerstatus?name=${app.id}`,
+        `http://localhost:8080/api/docker/status?name=${app.id}`,
       );
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
@@ -125,14 +124,28 @@ function AppDetail() {
         await fetchDockerStatus();
       } else if (dockerStatusState === "downloaded") {
         // Run container
-        await fetch(`http://localhost:8080/api/dockerrun?name=${app.id}`, {
+        await fetch(`http://localhost:8080/api/docker/run`, {
           method: "POST",
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            name: app.id,
+          }),
         });
         await fetchDockerStatus();
       } else if (dockerStatusState === "running") {
         // Stop container
-        await fetch(`http://localhost:8080/api/dockerstop?name=${app.id}`, {
+        await fetch(`http://localhost:8080/api/docker/stop`, {
           method: "POST",
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            name: app.id,
+          }),
         });
         await fetchDockerStatus();
       }
